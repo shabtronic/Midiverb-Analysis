@@ -4,6 +4,8 @@ This has only been prossible from these previous works:
 
 the amazing Hardware analysis by:
 
+- https://www.youtube.com/@MOTMguy
+
 - https://www.youtube.com/watch?v=z4cIt1VPAjU
 - https://www.youtube.com/watch?v=JNPpU08YZjk
 - https://www.youtube.com/watch?v=5DYbirWuBaU
