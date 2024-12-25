@@ -1,0 +1,1121 @@
+desc:MidiVerb/MidiFlex
+
+slider1:wet=0.75<0,1>Wet
+slider2:dry=0.75<0,1>Dry
+slider10:algo=0<0,6,1{Large Bright 2.5sec,Large Warm 5Secs,Bright 18secs,Dark 20Secs,Reverse 300ms,Reverse 600ms,Reverb Medium Bloom}>Program1
+slider20:gateduck=0<-2,2>Gate/Duck
+in_pin:left input
+in_pin:right input
+out_pin:left output
+out_pin:right output
+
+// Midiverb DSP
+//
+// (C) S.D.Smith 2024 all rights reserved
+//
+// From the rather awesome analysis by:
+//
+// https://www.youtube.com/watch?v=z4cIt1VPAjU
+// https://www.youtube.com/watch?v=JNPpU08YZjk
+// https://www.youtube.com/watch?v=5DYbirWuBaU
+//
+// and the SRC code from:
+//
+//  https://github.com/thement/midiverb_emulator
+//
+// and the web demo:
+//
+//  http://ibawizard.net/midiverb/
+//
+// Hardcoded instructions rather than eprom loading.
+// Repear JS has no generic binary loading, so it's either convert eprom to hex text
+// or pack // it into a 16bit wave file and try to unpack that, or massive 
+// constant src code which JS isn't geared up for.
+// As a side effect it is easier to play around and try to figure out
+// what everything does and also if you want to hand optimize later.
+
+
+
+@init
+memp=0;
+function Alloc(size)
+(
+memp+=size;
+memp-size;
+);
+
+
+
+sizemult=2;
+DRam_Size=sizemult*16*1024;
+DRam_Mask=DRam_Size-1;
+DRam=Alloc(DRam_Size);
+RomDwords=Alloc(32*1024);
+RomWords=Alloc(32*1024);
+DSP_Acc=0;
+DSP_Addr=0;
+
+@sample
+
+
+// Midiverbs 4 opcodes and DSP logic
+//
+// Super simple - all instruction addresses are relative
+// to the current DSP address.
+// So the actual programs choose how and when to increment
+// pointers in the circular buffer
+
+// Possible Easy optimizations:
+// Only apply to these relative addrs - wouldn't work
+// on actual hardware, since they are not absolute relative 
+
+// SumH(xxx)
+// LoadH(yyyy)
+// no need for the SumH - it's totally redundant
+
+// LoadH(xxxx)
+// SumH(xxxx)
+// can be replaced with a simple Load(xxxx)
+
+// StoreP(xx)
+// LoadH(xx)
+// no need for the acc calculation on the storep
+
+// StoreN(xx)
+// LoadH(xx)
+// no need for the acc calculation on the storep
+ 
+// SumH(xxxx)
+// SumH(xxxx)
+// can be replaced with a simple Sum(xxxx)
+
+
+// Generic AllPass Code in the Midiverb/MidiFlex:
+
+//    SumHalf(xx)
+//    StoreNeg(yy)
+//    SumHalf(xx)
+//    SumHalf(xx)
+
+// *note final output is negated
+
+// xx = delay output addr
+// yy = delay input addr
+
+// yy-xx = AP Delay time and the phase shift freq: 23100/(yy-xx)
+
+
+
+// The four DSP instructions
+
+// Didn't bother with the sign extend stuff
+
+
+
+function SumH(offset)
+(
+DSP_Acc += floor(DRam[(DSP_Addr+offset)&DRam_Mask]/2);
+);
+
+function LoadH(offset)
+(
+DSP_Acc = floor(DRam[(DSP_Addr+offset)&DRam_Mask]/2);
+);
+
+
+function StoreP(offset)
+(
+DRam[(DSP_Addr+offset)&DRam_Mask] = DSP_Acc;
+DSP_Acc = DSP_Acc + floor(DSP_Acc /2);
+);
+
+
+function StoreN(offset)
+(
+DRam[(DSP_Addr+offset)&DRam_Mask] = -DSP_Acc;
+DSP_Acc = floor(-DSP_Acc /2);
+);
+
+
+
+function ReadMem(offset)
+(
+DRam[(DSP_Addr+offset)&DRam_Mask];
+);
+
+function LargeBright2.5Secs()
+(
+LoadH(0x344c);
+SumH(0x22c2);
+SumH(0x13ed);
+StoreN(0x0003);
+StoreN(0x0003);
+LoadH(0x30f5);
+SumH(0x270f);
+SumH(0x17f5);
+StoreN(0x0005);
+StoreN(0x0005);
+LoadH(0x3fff);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+SumH(0x3ebc);
+StoreN(0x3ffd);
+SumH(0x3ebc);
+SumH(0x3ebc);
+SumH(0x3d0b);
+StoreN(0x3eba);
+SumH(0x3d0b);
+SumH(0x3d0b);
+SumH(0x3a09);
+StoreN(0x3d09);
+SumH(0x3a09);
+SumH(0x3a09);
+SumH(0x35b9);
+StoreN(0x3a07);
+SumH(0x35b9);
+SumH(0x35b9);
+SumH(0x34cd);
+StoreN(0x35b7);
+SumH(0x34cd);
+SumH(0x34cd);
+SumH(0x3463);
+StoreN(0x34cb);
+SumH(0x3463);
+SumH(0x3463);
+StoreP(0x0002);
+LoadH(0x2ed1);
+StoreP(0x0001);
+SumH(0x2897);
+StoreN(0x2ecf);
+SumH(0x2897);
+SumH(0x2897);
+StoreP(0x2895);
+LoadH(0x2183);
+StoreN(0x0001);
+SumH(0x1a96);
+StoreN(0x2181);
+SumH(0x1a96);
+SumH(0x1a96);
+StoreP(0x1a94);
+LoadH(0x11c3);
+StoreP(0x0001);
+SumH(0x08b9);
+StoreN(0x11c1);
+SumH(0x08b9);
+SumH(0x08b9);
+StoreP(0x0001);
+StoreP(0x0001);
+LoadH(0x08b3);
+StoreN(0x0007);
+SumH(0x08b3);
+SumH(0x0001);
+StoreP(0x08b4);
+LoadH(0x08b4);
+SumH(0x08b4);
+SumH(0x0002);
+SumH(0x0002);
+StoreP(0x3461);
+);
+
+function LargeWarm5Secs()
+(
+LoadH(0x314c);
+SumH(0x1d06);
+SumH(0x0b11);
+StoreN(0x0003);
+StoreN(0x0003);
+LoadH(0x2d6f);
+SumH(0x20ef);
+SumH(0x1045);
+StoreN(0x0005);
+StoreN(0x0005);
+LoadH(0x3fff);
+SumH(0x003e);
+StoreP(0x003f);
+LoadH(0x003e);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+SumH(0x3ebc);
+StoreN(0x3ffd);
+SumH(0x3ebc);
+SumH(0x3ebc);
+SumH(0x3d0b);
+StoreN(0x3eba);
+SumH(0x3d0b);
+SumH(0x3d0b);
+SumH(0x3941);
+StoreN(0x3d09);
+SumH(0x3941);
+SumH(0x3941);
+SumH(0x32eb);
+StoreN(0x393f);
+SumH(0x32eb);
+SumH(0x32eb);
+SumH(0x31ff);
+StoreN(0x32e9);
+SumH(0x31ff);
+SumH(0x31ff);
+SumH(0x3163);
+StoreN(0x31fd);
+SumH(0x3163);
+SumH(0x3163);
+StoreP(0x0002);
+LoadH(0x2c35);
+SumH(0x2c35);
+SumH(0x246b);
+StoreN(0x2c33);
+SumH(0x246b);
+SumH(0x246b);
+StoreP(0x2469);
+LoadH(0x1c2b);
+StoreN(0x0001);
+StoreN(0x0001);
+SumH(0x1c2b);
+StoreP(0x0001);
+SumH(0x12e6);
+StoreN(0x1c29);
+SumH(0x12e6);
+SumH(0x12e6);
+StoreP(0x12e4);
+LoadH(0x0a13);
+StoreP(0x0001);
+SumH(0x0041);
+StoreN(0x0a11);
+SumH(0x0041);
+SumH(0x0041);
+StoreP(0x0001);
+StoreP(0x0001);
+LoadH(0x003b);
+StoreN(0x0007);
+SumH(0x003b);
+SumH(0x0001);
+StoreP(0x003c);
+LoadH(0x003c);
+SumH(0x003c);
+SumH(0x0002);
+SumH(0x0002);
+StoreP(0x3161);
+);
+
+function LargeBright18Sec()
+(
+LoadH(0x32d4);
+SumH(0x1d62);
+SumH(0x0b6d);
+StoreN(0x0003);
+StoreN(0x0003);
+LoadH(0x2ef7);
+SumH(0x214b);
+SumH(0x10a1);
+StoreN(0x0005);
+StoreN(0x0005);
+LoadH(0x3fff);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+SumH(0x3ebc);
+StoreN(0x3ffd);
+SumH(0x3ebc);
+SumH(0x3ebc);
+SumH(0x3d0b);
+StoreN(0x3eba);
+SumH(0x3d0b);
+SumH(0x3d0b);
+SumH(0x3941);
+StoreN(0x3d09);
+SumH(0x3941);
+SumH(0x3941);
+SumH(0x32eb);
+StoreN(0x393f);
+SumH(0x32eb);
+SumH(0x32eb);
+StoreP(0x0002);
+LoadH(0x2c91);
+SumH(0x2c91);
+SumH(0x24c7);
+StoreN(0x2c8f);
+SumH(0x24c7);
+SumH(0x24c7);
+StoreP(0x24c5);
+LoadH(0x1c87);
+StoreN(0x0001);
+StoreN(0x0001);
+SumH(0x1c87);
+StoreP(0x0001);
+SumH(0x1342);
+StoreN(0x1c85);
+SumH(0x1342);
+SumH(0x1342);
+StoreP(0x1340);
+LoadH(0x0ad3);
+StoreN(0x0001);
+StoreN(0x0001);
+SumH(0x0ad3);
+StoreP(0x0001);
+SumH(0x0039);
+StoreN(0x0ad1);
+SumH(0x0039);
+SumH(0x0039);
+StoreP(0x0001);
+StoreP(0x0001);
+LoadH(0x0036);
+StoreN(0x0007);
+SumH(0x0036);
+SumH(0x0001);
+StoreP(0x0037);
+LoadH(0x0037);
+SumH(0x0037);
+SumH(0x0002);
+SumH(0x0002);
+StoreP(0x32e9);
+);
+
+function ExLargeDark20Secs()
+(
+LoadH(0x32d4);
+SumH(0x1d62);
+SumH(0x0b6d);
+StoreN(0x0003);
+StoreN(0x0003);
+LoadH(0x2ef7);
+SumH(0x214b);
+SumH(0x10a1);
+StoreN(0x0005);
+StoreN(0x0005);
+LoadH(0x3fff);
+SumH(0x0036);
+StoreP(0x0037);
+LoadH(0x0036);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+StoreP(0x0002);
+SumH(0x3ebc);
+StoreN(0x3ffd);
+SumH(0x3ebc);
+SumH(0x3ebc);
+SumH(0x3d0b);
+StoreN(0x3eba);
+SumH(0x3d0b);
+SumH(0x3d0b);
+SumH(0x3941);
+StoreN(0x3d09);
+SumH(0x3941);
+SumH(0x3941);
+SumH(0x32eb);
+StoreN(0x393f);
+SumH(0x32eb);
+SumH(0x32eb);
+StoreP(0x0002);
+LoadH(0x2c91);
+SumH(0x2c91);
+SumH(0x24c7);
+StoreN(0x2c8f);
+SumH(0x24c7);
+SumH(0x24c7);
+StoreP(0x24c5);
+LoadH(0x1c87);
+StoreN(0x0001);
+StoreN(0x0001);
+SumH(0x1c87);
+StoreP(0x0001);
+SumH(0x1342);
+StoreN(0x1c85);
+SumH(0x1342);
+SumH(0x1342);
+StoreP(0x1340);
+LoadH(0x0ad3);
+StoreN(0x0001);
+StoreN(0x0001);
+SumH(0x0ad3);
+StoreP(0x0001);
+SumH(0x0039);
+StoreN(0x0ad1);
+SumH(0x0039);
+SumH(0x0039);
+StoreN(0x0001);
+SumH(0x0033);
+StoreP(0x0034);
+LoadH(0x0034);
+SumH(0x0034);
+SumH(0x0002);
+SumH(0x0002);
+StoreP(0x32e9);
+);
+
+function Reverse300ms()
+(
+LoadH(0x0009);
+SumH(0x08e5);
+StoreN(0x08fa);
+
+SumH(0x08e5);
+SumH(0x08e5);
+SumH(0x08ae);
+StoreN(0x08e3);
+
+SumH(0x08ae);
+SumH(0x08ae);
+SumH(0x07ff);
+StoreN(0x08ac);
+
+SumH(0x07ff);
+SumH(0x07ff);
+SumH(0x2489);
+SumH(0x2489);
+StoreP(0x0003);
+
+LoadH(0x0009);
+SumH(0x07dd);
+StoreN(0x07fd);
+
+SumH(0x07dd);
+SumH(0x07dd);
+SumH(0x0790);
+StoreN(0x07db);
+
+SumH(0x0790);
+SumH(0x0790);
+SumH(0x0709);
+StoreN(0x078e);
+
+SumH(0x0709);
+SumH(0x0709);
+SumH(0x2489);
+SumH(0x2489);
+StoreP(0x0005);
+
+LoadH(0x3f5d);
+SumH(0x3f17);
+SumH(0x3e64);
+SumH(0x3dea);
+SumH(0x3d07);
+SumH(0x3c95);
+SumH(0x3a66);
+SumH(0x3ba1);
+SumH(0x38ba);
+StoreN(0x0001);
+
+SumH(0x3bd7);
+SumH(0x39ed);
+SumH(0x3932);
+SumH(0x3b2f);
+SumH(0x3802);
+SumH(0x379b);
+SumH(0x34c7);
+SumH(0x3675);
+SumH(0x33cf);
+SumH(0x355f);
+StoreN(0x0001);
+
+SumH(0x3730);
+SumH(0x3424);
+SumH(0x35ed);
+SumH(0x333d);
+SumH(0x3285);
+SumH(0x320f);
+SumH(0x2e74);
+SumH(0x30cf);
+SumH(0x303e);
+SumH(0x2fc8);
+SumH(0x2d0f);
+StoreN(0x0001);
+
+SumH(0x3173);
+SumH(0x2e34);
+SumH(0x2d89);
+SumH(0x2f5f);
+SumH(0x2c56);
+SumH(0x2933);
+SumH(0x2b8d);
+SumH(0x2ad3);
+SumH(0x27f1);
+StoreN(0x0001);
+
+SumH(0x2981);
+SumH(0x2bf7);
+SumH(0x286d);
+SumH(0x2a62);
+SumH(0x27b1);
+SumH(0x26d2);
+StoreP(0x000b);
+);
+
+// Midiverb Reverse Algo Analysis
+
+// Topology:
+// PreDelay(21ms)->5 MultiTap Comb filters->Post Delay->Stereo AP x 3 for each channel
+
+function Reverse600ms()
+(
+// Addrs 1-8 are scratchpad locations
+//
+// Stereo All Pass Blocks, three per channel
+
+// Gives a pseudo stereo field effect since the AP's are 
+// tuned differently for each channel
+
+// AP Addresses (0x08fa to 0x0709) are after the multitap addresses
+// and so the AP blocks and calculations never get accidentally
+// mixed up into the multitap delay line - which starts/ends at 0x3FFF to 0x0B22
+
+// Post Delay from 0x0B22 to 0x0950 after the multitap
+
+// Multitap delay line is 13,533 samples 580ms
+
+LoadH(0x0009); // Load in sample from the multitap output (stored at 0xB - so a 2 sample delay)
+
+SumH(0x08e5); // AP Right 1 23.1khz/(8FA-8E5) = 23.1khz/(21) = 1.1khz
+StoreN(0x08fa);
+SumH(0x08e5);
+SumH(0x08e5);
+
+SumH(0x08ae); // AP Right 2 23.1khz/53 = 435hz
+StoreN(0x08e3);
+SumH(0x08ae); 
+SumH(0x08ae);
+
+SumH(0x07ff); // AP Right 3 23.1khz/173 = 133hz
+StoreN(0x08ac);
+SumH(0x07ff);
+SumH(0x07ff);
+
+// Add the whole mono sample from 0x950 - which is very late in the delay line
+// this gives the original sound - just delayed and bypasses the AP blocks.
+// Comment these 2 lines out if you want just pure reverse blur in the wet signal
+
+//SumH(0x0950);
+//SumH(0x0950);
+
+StoreP(0x0003); // Store to Left output addr
+
+LoadH(0x0009); // Load in delay line sample from the multitap
+
+SumH(0x07dd); // AP Left 1 23.1khz/32 = 721hz 
+StoreN(0x07fd);
+SumH(0x07dd);
+SumH(0x07dd);
+
+SumH(0x0790); // AP Left 2 23.1khz/75 = 308hz
+StoreN(0x07db);
+SumH(0x0790);
+SumH(0x0790);
+
+SumH(0x0709); // AP Left 3 231.1khz/133 = 173hz
+StoreN(0x078e);
+SumH(0x0709);
+SumH(0x0709);
+
+// Add the whole mono sample from 0x950 - which is late in the delay line
+// this gives the original sound - just delayed and bypasses the AP blocks.
+// Comment these 2 lines out if you want just pure reverse blur in the wet signal
+
+//SumH(0x0950);
+//SumH(0x0950);
+
+StoreP(0x0005); // Store to Right output addr
+
+
+// Main reverse algo
+
+// 5 sets of summed samples - each set with increasing gain
+// Each set spans a specific set of samples from early to late
+// and they overlap.
+
+// Spans:
+
+// 1st 0x3BD7 to 0x320F
+// 2nd      0x379B to 0x27B1
+// 3rd             0x2981 to 0x1C01
+// 4th                  0x22F1 to 0x10D6
+// 5th                         0x140A to 0x0B22
+//
+// @GFX section draw the sets - so you can see what's going on
+// easily.
+// If you look at the entire set of spans - they almost have equal
+// time difference and are from 1 linear set that covers the entire total span.
+// Each set looks hand chosen:
+//    1) To give more control the volume/gain for that set (tap density)
+//    since the DSP engine can't have varible constants for each tap. 
+//    2) To control the overlap with the next set - guessing to control
+//    phase issues?
+
+// Each set sum has a different opposing sign apart from the last stage
+// which is a +0.5 in the LoadH(0x0009); at the start of the program
+
+// 1st set = gain -0.5*-0.5*-0.5*-0.5*0.5
+// 2st set = gain -0.5*-0.5*-0.5*0.5
+// 3rd set = gain -0.5*-0.5*0.5
+// 4th set = gain -0.5*0.5
+// 5th set = gain 0.5 
+
+// so it's a cascading overlapped multi tap comb filter thing :)
+// Tap order in each set is irrelevant
+
+// There's also a Predelay of 0x3ffff-0x3BD7 samples - 21ms
+
+//Set 1 - 13 Taps
+SumH(0x3bd7);
+SumH(0x3ba1);
+SumH(0x3b2f);
+SumH(0x3a66);
+SumH(0x39ed);
+SumH(0x3932);
+SumH(0x38ba);
+SumH(0x3802);
+SumH(0x3730);
+SumH(0x3675);
+SumH(0x355f);
+SumH(0x33cf);
+SumH(0x320f);
+// Negate the ACC and multiply by 0.5
+// Addr 1 = scratchpad area - wiped over on next process
+StoreN(0x0001);
+
+//Set 2 - 20 Taps
+SumH(0x379b);
+
+SumH(0x35ed);
+SumH(0x34c7);
+SumH(0x3424);
+SumH(0x333d);
+SumH(0x3285);
+SumH(0x3173);
+SumH(0x30cf);
+SumH(0x303e);
+SumH(0x2fc8);
+SumH(0x2f5f);
+SumH(0x2e74);
+SumH(0x2e34);
+SumH(0x2d89);
+SumH(0x2d0f);
+SumH(0x2bf7);
+SumH(0x2b8d);
+SumH(0x2a62);
+SumH(0x286d);
+SumH(0x27b1);
+// Negate the ACC and multiply by 0.5
+// Addr 1 = scratchpad area - wiped over on next process
+StoreN(0x0001);
+
+// Set 3 - 19 Taps
+SumH(0x2c56);
+SumH(0x2ad3);
+SumH(0x2981);
+SumH(0x2933);
+
+SumH(0x27f1);
+SumH(0x26d2);
+SumH(0x267a);
+SumH(0x2582);
+SumH(0x2535);
+SumH(0x2481);
+SumH(0x242a);
+SumH(0x23cb);
+SumH(0x2292);
+SumH(0x21c8);
+SumH(0x212d);
+SumH(0x202e);
+SumH(0x1faa);
+SumH(0x1e8b);
+SumH(0x1c01);
+// Negate the ACC and multiply by 0.5
+// Addr 1 = scratchpad area - wiped over on next process
+StoreN(0x0001);
+
+// Set 4 - // 20 Taps
+
+SumH(0x22f1);
+SumH(0x209e);
+SumH(0x1f01);
+SumH(0x1e04);
+SumH(0x1d4b);
+SumH(0x1ccc);
+SumH(0x1c2d);
+SumH(0x1b17);
+SumH(0x1ad7);
+SumH(0x19db);
+SumH(0x1975);
+SumH(0x18c2);
+SumH(0x1882);
+SumH(0x17d3);
+SumH(0x16ae);
+SumH(0x1612);
+SumH(0x14f1);
+SumH(0x144f);
+SumH(0x123d);
+SumH(0x10d6);
+// Negate the ACC and multiply by 0.5
+// Addr 1 = scratchpad area - wiped over on next process
+StoreN(0x0001);
+
+// Set 5 Late - // 16 Taps
+SumH(0x1744);
+SumH(0x15c1);
+SumH(0x140a);
+SumH(0x1329);
+SumH(0x12e6);
+SumH(0x11b9);
+SumH(0x10b0);
+SumH(0x1009);
+SumH(0x0f81);
+SumH(0x0f1c);
+SumH(0x0e36);
+SumH(0x0df1);
+SumH(0x0d0a);
+SumH(0x0c5f);
+SumH(0x0bbe);
+SumH(0x0b22);
+//Store it to be passed into the final AP Stereo Blocks in 2 samples time 0x9
+StoreP(0x000b); 
+);
+
+// From Midiflex
+function ReverbMediumBloom()
+(
+SumH( 0x0000); // Redundant - does nothing
+
+LoadH(  0x088d); // Write to Left channel output from 88d
+StoreP( 0x0003);
+
+LoadH(  0x088a); // Write to Right channel output from 88a
+StoreP( 0x0005);
+
+LoadH(  0x0890); // Simple 0.5 gain feedback loop from -1 to 890
+SumH( 0x3fff);
+StoreP( 0x0891);
+
+LoadH(  0x000a); // Another feedback loop 0xA to 0x888
+StoreN( 0x0001); // Negate only - writes to scratchpad addr 1 - wiped over on next process
+SumH( 0x0887);
+StoreP( 0x0888);
+
+SumH( 0x0890); // Add the previous feedback loop
+SumH( 0x0890);
+
+SumH( 0x3ff0);   // 15 AP blocks
+StoreN( 0x3ffd);
+SumH( 0x3ff0);
+SumH( 0x3ff0);
+
+SumH( 0x3f9b);
+StoreN( 0x3fee);
+SumH( 0x3f9b);
+SumH( 0x3f9b);
+
+SumH( 0x3f25);
+StoreN( 0x3f99);
+SumH( 0x3f25);
+SumH( 0x3f25);
+
+SumH( 0x3e34);
+StoreN( 0x3f23);
+SumH( 0x3e34);
+SumH( 0x3e34);
+
+SumH( 0x3cdf);
+StoreN( 0x3e32);
+SumH( 0x3cdf);
+SumH( 0x3cdf);
+
+SumH( 0x3afc);
+StoreN( 0x3cdd);
+SumH( 0x3afc);
+SumH( 0x3afc);
+
+SumH( 0x38cf);
+StoreN( 0x3afa);
+SumH( 0x38cf);
+SumH( 0x38cf);
+
+SumH( 0x3596);
+StoreN( 0x38cd);
+SumH( 0x3596);
+SumH( 0x3596);
+
+SumH( 0x31ad);
+StoreN( 0x3594);
+SumH( 0x31ad);
+SumH( 0x31ad);
+
+SumH( 0x2d5f);
+StoreN( 0x31ab);
+SumH( 0x2d5f);
+SumH( 0x2d5f);
+
+SumH( 0x281a);
+StoreN( 0x2d5d);
+SumH( 0x281a);
+SumH( 0x281a);
+
+SumH( 0x21fd);
+StoreN( 0x2818);
+SumH( 0x21fd);
+SumH( 0x21fd);
+
+SumH( 0x1aca);
+StoreN( 0x21fb);
+SumH( 0x1aca);
+SumH( 0x1aca);
+
+SumH( 0x12f7);
+StoreN( 0x1ac8);
+SumH( 0x12f7);
+SumH( 0x12f7);
+
+SumH( 0x0ad2);
+StoreN( 0x12f5);
+SumH( 0x0ad2);
+SumH( 0x0ad2);
+
+StoreP( 0x000b);
+LoadH(  0x000b);
+SumH( 0x000b);
+
+SumH( 0x09d7);
+StoreN( 0x0a6a);
+SumH( 0x09d7);
+SumH( 0x09d7);
+
+SumH( 0x0aa5);
+StoreN( 0x0ad0);
+SumH( 0x0aa5);
+SumH( 0x0aa5);
+
+SumH( 0x0a6c);
+StoreN( 0x0aa3);
+SumH( 0x0a6c);
+SumH( 0x0a6c);
+
+StoreP( 0x088e);
+
+LoadH(  0x000b); // Load whole sample from 0x000B
+SumH( 0x000b);
+
+SumH( 0x0893);    // Another 3 AP blocks
+StoreN( 0x098c);
+SumH( 0x0893);
+SumH( 0x0893);
+
+SumH( 0x098e); 
+StoreN( 0x09be);
+SumH( 0x098e);
+SumH( 0x098e);
+
+SumH( 0x09c0);
+StoreN( 0x09d5);
+SumH( 0x09c0);
+SumH( 0x09c0);
+
+StoreP( 0x088b);
+);
+
+ins+=((spl0+spl1)/2);
+abs(ins)>Peak? Peak=abs(ins): Peak*=0.99997;
+Quant=2048; // 12 bit
+
+// Downsample to 22khz - Midiverb hardware runs at 23.1lhz - but this is close enought
+dsc==1?
+  (
+  dsc=0;
+  ins=floor(ins/2*Quant);
+  
+  // Hardware grabs the ADC and stores at addr 0 at instruction zero
+  DRam[DSP_Addr]=ins;
+
+  algo==0? LargeBright2.5Secs();
+  algo==1? LargeWarm5Secs();
+  algo==2? LargeBright18Sec();
+  algo==3? ExLargeDark20Secs();
+  algo==4? Reverse300ms();
+  algo==5? Reverse600ms();
+  algo==6? ReverbMediumBLoom();
+  
+  // Hardware reads the address bus at instructions 0x60 and 0x70
+  // but we skip that since all the offical eprom programs use 0x3 
+  // and 0x5 for Left/Right output channels
+  
+  OutL=ReadMem(0x5);
+  OutR=ReadMem(0x3);
+  
+  // Hardware doesn't do this - just a optimization
+  // since we're using addrs relative to the DSP_Addr
+  // at the start of each sample process run. And assuming
+  // that each program increments the addr by 1 every time (it's very possible
+  // to increment the addr by anything in actuality, but all the 
+  // offical eprom programs end up incrementing addr by 1 
+  // by the end of the 128 instructios).
+  
+  DSP_Addr=(DSP_Addr+1)&DRam_Mask;
+
+  // Saturate
+  OutL/=Quant;
+  OutR/=Quant;
+  OutL>1? OutL=1;
+  OutL<-1? OutL=-1;
+  OutR>1? OutR=1;
+  OutR<-1? OutR=-1;
+  
+  ins=0;
+  ):
+  dsc+=1;
+outmod=1; 
+gateduck<0? 
+(
+outmod=peak*-gateduck;
+);
+gateduck>0? 
+(
+outmod=(1-peak)*gateduck;  
+);  
+outmod>1? outmod=1;
+outmod<0? outmod=0;
+
+spl0 = spl0*dry+wet*0.75*OutR*outmod;
+spl1 = spl1*dry+wet*0.75*OutL*outmod;
+@gfx
+gfx_setfont(1,"Arial Black",30);
+gfx_set(1,0.5,0,1);
+
+gfx_measurestr("MidiVerb/MidiFlex",tw,th);
+gfx_x=(gfx_w-tw)/2;
+gfx_y=0;
+gfx_drawstr("MidiVerb/MidiFlex");
+gfx_set(0,1,0,1);
+
+gfx_rect(0,(1-peak)*(gfx_h)+30,20,gfx_h-(1-peak)*gfx_h);
+
+gateduck<0? 
+(
+gate=peak*-gateduck;
+gate>1? gate=1;
+gfx_set(1,0.3,0.3,1);
+gfx_recT(20,(1-gate)*(gfx_h)+30,20,gfx_h-(1-gate)*gfx_h);
+)
+:
+(
+duck=(1-peak)*gateduck;
+duck>1? duck=1;
+gfx_set(1,0.5,0,1);
+gfx_recT(20,(1-duck)*(gfx_h)+30,20,gfx_h-(1-duck)*gfx_h);
+);
+
+
+// Draw the 600ms Reverse Tap Delay Position
+ts=0x0b22;
+td=0x3bd7-ts;
+
+// Set1
+y=30;
+sh=30;
+gfx_set(0,1,0,1);
+tp=(0x3bd7-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3ba1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3b2f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3a66-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x39ed-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3932-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x38ba-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3802-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3730-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3675-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x355f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x33cf-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x320f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+
+// Set2
+y+=30;
+gfx_set(0,1,0,1);
+tp=(0x379b-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x35ed-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x34c7-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3424-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x333d-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3285-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x3173-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x30cf-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x303e-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2fc8-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2f5f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2e74-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2e34-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2d89-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2d0f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2bf7-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2b8d-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2a62-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x286d-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x27b1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+
+
+// Set 3
+y+=30;
+gfx_set(0,1,0,1);
+tp=(0x2c56-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2ad3-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2981-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2933-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x27f1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x26d2-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x267a-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2582-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2535-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2481-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x242a-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x23cb-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x2292-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x21c8-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x212d-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x202e-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1faa-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1e8b-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1c01-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+// Set 4
+y+=30;
+gfx_set(0,1,0,1);
+
+tp=(0x22f1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x209e-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1f01-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1e04-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1d4b-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1ccc-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1c2d-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1b17-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1ad7-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x19db-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1975-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x18c2-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1882-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x17d3-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x16ae-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1612-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x14f1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x144f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x123d-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x10d6-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+// Set 5
+y+=30;
+gfx_set(0,1,0,1);
+tp=(0x1744-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x15c1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x140a-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1329-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x12e6-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x11b9-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x10b0-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x1009-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0f81-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0f1c-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0e36-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0df1-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0d0a-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0c5f-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0bbe-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+tp=(0x0b22-ts)/td; gfx_line(tp*gfx_w,y,tp*gfx_w,y+sh);
+
