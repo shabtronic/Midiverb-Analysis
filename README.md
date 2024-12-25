@@ -1,6 +1,6 @@
 A simple reaper JS rig to analyise the various Midiverb algos.
 
-This has only been prossible from these previous works:
+This has only been possible from these previous works:
 
 the amazing Hardware analysis by:
 
