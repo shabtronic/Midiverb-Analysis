@@ -165,7 +165,6 @@ StoreN(0x0001);
 
 //Set 2 - 20 Taps
 SumH(0x379b);
-
 SumH(0x35ed);
 SumH(0x34c7);
 SumH(0x3424);
@@ -194,7 +193,6 @@ SumH(0x2c56);
 SumH(0x2ad3);
 SumH(0x2981);
 SumH(0x2933);
-
 SumH(0x27f1);
 SumH(0x26d2);
 SumH(0x267a);
