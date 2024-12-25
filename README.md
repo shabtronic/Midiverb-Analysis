@@ -12,7 +12,7 @@ Reverse 600ms
 Reverb Medium Bloom (from the midiflex)
 
 
-![](./Images/MidiVerbJs.png)
+![](./Images/MidiVerbJS.png)
 
 
 
