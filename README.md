@@ -1,5 +1,20 @@
 A simple reaper JS rig to analyise the various Midiverb algos.
 
+This has only been prossible from these previous works:
+
+Hardware awesome analysis by:
+
+https://www.youtube.com/watch?v=z4cIt1VPAjU
+https://www.youtube.com/watch?v=JNPpU08YZjk
+https://www.youtube.com/watch?v=5DYbirWuBaU
+
+and the SRC code from:
+
+https://github.com/thement/midiverb_emulator
+
+and the web demo:
+
+http://ibawizard.net/midiverb/
 
 Has the following algos, hardcoded:
 
