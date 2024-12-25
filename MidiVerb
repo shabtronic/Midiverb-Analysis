@@ -46,7 +46,7 @@ memp-size;
 
 
 
-sizemult=2;
+sizemult=1;
 DRam_Size=sizemult*16*1024;
 DRam_Mask=DRam_Size-1;
 DRam=Alloc(DRam_Size);
