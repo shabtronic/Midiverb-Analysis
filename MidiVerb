@@ -916,12 +916,14 @@ StoreP( 0x088b);
 );
 
 ins+=((spl0+spl1)/2);
-abs(ins)>Peak? Peak=abs(ins): Peak*=0.99997;
+
 Quant=2048; // 12 bit
 
 // Downsample to 22khz - Midiverb hardware runs at 23.1lhz - but this is close enought
 dsc==1?
   (
+  // Put the damn peak detector inside the downsample lol
+  abs(ins/2)>Peak? Peak=abs(ins/2): Peak*=0.99997;
   dsc=0;
   ins=floor(ins/2*Quant);
   
